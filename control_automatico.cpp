@@ -1,4 +1,5 @@
-#include <IRremote.hpp> // Asegúrate de que esté instalada la librería IRremote
+#include <Servo.h>
+#include <IRremote.hpp>
 
 // Control manual/automatico
 boolean ES_MANUAL;
@@ -19,6 +20,12 @@ constexpr uint16_t ADELANTE = 0x1;  // Botón ADELANTE
 constexpr uint16_t ATRAS = 0x6;     // Botón ATRÁS
 constexpr uint16_t IZQUIERDA = 0x4; // Botón IZQUIERDA
 constexpr uint16_t DERECHA = 0x9;   // Botón DERECHA
+
+// Valores del sensor y servo
+Servo servoMotor;
+const int trigPin = A5; // out
+const int echoPin = A4; // in
+const int servoPin = 3;
 
 // Función para recibir el código IR
 uint16_t irReceive()
@@ -57,11 +64,18 @@ void setup()
 
     // Inicializar los motores apagados
     apagarMotores();
+  
+  	// Configurar el servo
+  	servoMotor.attach(servoPin);
+  
+  	// Configurar los pines del sensor ultrasónico
+    pinMode(trigPin, OUTPUT);
+    pinMode(echoPin, INPUT);
 
     // Inicializar la recepción del IR
     IrReceiver.begin(RECV_PIN);
-    Serial.print(F("Listo para recibir señales IR en el pin "));
-    Serial.println(RECV_PIN);
+    // Serial.print(F("Listo para recibir señales IR en el pin "));
+    // Serial.println(RECV_PIN);
 }
 
 void loop()
@@ -104,34 +118,71 @@ void loop()
     }
     else
     {
-        // Los mismos botones del manual ahora no deben hacer nada
-        switch (irCode)
-        {
-        case POWER:
-            Serial.println("NO HACE NADA");
-            break;
+        int distanciaIzquierda, distanciaCentro, distanciaDerecha;
 
-        case ADELANTE:
-            Serial.println("NO HACE NADA");
-            break;
+        // Medir la distancia hacia la izquierda
+        servoMotor.write(0);
+        delay(500);
+        distanciaIzquierda = medirDistancia();
 
-        case IZQUIERDA:
-            Serial.println("NO HACE NADA");
-            break;
+        // Medir la distancia al frente
+        servoMotor.write(90);
+        delay(500);
+        distanciaCentro = medirDistancia();
 
-        case ATRAS:
-            Serial.println("NO HACE NADA");
-            break;
+        // Medir la distancia hacia la derecha
+        servoMotor.write(180);
+        delay(500);
+        distanciaDerecha = medirDistancia();
 
-        case DERECHA:
-            Serial.println("NO HACE NADA");
-            break;
+        // Determinar la dirección en función de las distancias medidas
+        if (distanciaCentro < 20) {
+            apagarMotores();
+            delay(500);
 
-        default:
-            // No hacer nada si se presiona un botón diferente
-            break;
+            // Si el obstáculo mas cerca a la derecha derecha, gira a la izquierda
+            if (distanciaDerecha < distanciaIzquierda) {
+                izquierda();
+                delay(1000);
+            }
+            // Si el obstáculo esta más cerca a la izquierda, gira a la derecha
+            else if (distanciaIzquierda < distanciaDerecha) {
+                derecha();
+                delay(1000);
+            }
+            else {
+                // Si el obstáculo está de frente pero ambas direcciones son iguales,
+                // simplemente retrocede y gira a la derecha por defecto
+                atras();
+                delay(1000);
+                derecha();
+                delay(1000);
+            }
+            apagarMotores();
+            delay(500);
+        }
+        else {
+            // Si no hay obstáculos, sigue adelante
+            adelante();
         }
     }
+}
+
+int medirDistancia() {
+  // Enviar un pulso al pin TRIG
+  digitalWrite(trigPin, LOW); // Se asegura que cualquier anterir este apagado
+  delayMicroseconds(2); // esperar
+  digitalWrite(trigPin, HIGH); // alta durante 10 ms
+  delayMicroseconds(10); 
+  digitalWrite(trigPin, LOW); // fin del pulso
+
+  // Leer el tiempo que tarda el pulso en volver al pin ECHO
+  long duracion = pulseIn(echoPin, HIGH);
+
+  // Calcular la distancia en centímetros
+  int distancia = duracion * 0.034 / 2;
+  
+  return distancia;
 }
 
 void adelante()
@@ -176,14 +227,5 @@ void apagarMotores()
     digitalWrite(motor1Pin1, LOW);
     digitalWrite(motor1Pin2, LOW);
     digitalWrite(motor2Pin1, LOW);
-    digitalWrite(motor2Pin2, LOW);
-}
-
-void prueba()
-{
-    // Apagar todos los motores
-    digitalWrite(motor1Pin1, LOW);
-    digitalWrite(motor1Pin2, LOW);
-    digitalWrite(motor2Pin1, HIGH);
     digitalWrite(motor2Pin2, LOW);
 }
