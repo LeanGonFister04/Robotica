@@ -1,0 +1,80 @@
+void loop() {
+    uint16_t irCode = irReceive();
+
+    if (irCode == CONTROL) {
+        ES_MANUAL = !ES_MANUAL;
+        setColor(180, 0, 0);
+    }
+
+    if (ES_MANUAL) {
+        setColor(0, 0, 0);
+        if (irCode != 0) {
+            lastCommandTime = millis();
+        }
+        // Control manual por IR
+        switch (irCode) {
+            case POWER:
+                apagarMotores();
+                break;
+            case ADELANTE:
+                irAdelante();
+                break;
+            case IZQUIERDA:
+                irIzquierda();
+                break;
+            case ATRAS:
+                irAtras();
+                break;
+            case DERECHA:
+                irDerecha();
+                break;
+        }
+        if (millis() - lastCommandTime > commandTimeout) {
+            apagarMotores();
+        }
+    } else {
+        // Modo automático con mejoras
+        int distanciaIzquierda, distanciaCentro, distanciaDerecha;
+        int distanciaMinima = 20;  // Umbral de distancia mínima en cm (LÍNEA NUEVA)
+
+        // Medir las tres distancias sin retrasos excesivos
+        servoMotor.write(0);    // Mover a la izquierda
+        delay(200);             // Reducir el tiempo de espera (CAMBIADO DE 500 A 200)
+        distanciaIzquierda = medirDistancia();
+
+        servoMotor.write(90);   // Mover al centro
+        delay(200);             // Reducir el tiempo de espera (CAMBIADO DE 500 A 200)
+        distanciaCentro = medirDistancia();
+
+        servoMotor.write(180);  // Mover a la derecha
+        delay(200);             // Reducir el tiempo de espera (CAMBIADO DE 500 A 200)
+        distanciaDerecha = medirDistancia();
+
+        // Tomar decisiones basadas en la distancia
+        if (distanciaCentro < distanciaMinima) {  // Ahora considera el umbral (CAMBIO)
+            apagarMotores();
+            delay(300);  // Se redujo el delay para respuesta rápida
+
+            // Si ambos lados tienen obstáculos cercanos, retroceder y girar más tiempo
+            if (distanciaIzquierda < distanciaMinima && distanciaDerecha < distanciaMinima) {  // Nueva condición para retroceso (LÍNEA NUEVA)
+                atras();
+                delay(1000);  // Retrocede más tiempo (CAMBIADO)
+                derecha();    // Gira completamente a la derecha
+                delay(1500);  // Más tiempo para el giro completo (CAMBIADO)
+            }
+            // Si el obstáculo está más cerca de la derecha, girar a la izquierda
+            else if (distanciaDerecha < distanciaIzquierda) {
+                izquierda();
+                delay(1000);  // Gira durante más tiempo (CAMBIADO)
+            }
+            // Si el obstáculo está más cerca de la izquierda, girar a la derecha
+            else {
+                derecha();
+                delay(1000);  // Gira durante más tiempo (CAMBIADO)
+            }
+        } else {
+            // Si no hay obstáculos, sigue adelante
+            adelante();
+        }
+    }
+}
