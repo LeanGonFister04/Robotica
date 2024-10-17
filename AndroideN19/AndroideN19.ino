@@ -3,29 +3,37 @@
 
 // Control manual/automatico
 boolean ES_MANUAL;
-constexpr uint16_t CONTROL = 0x2; // Botón Cambia de Control
+constexpr uint16_t CONTROL = 0x9; // Botón Cambia de Control
 
 // Pines del receptor IR
 constexpr uint8_t RECV_PIN{2}; // Pin del receptor IR
 
-// Pines del L293D para los motores
-constexpr int motor1A = 7;
-constexpr int motor1B = 8;
-constexpr int motor2A = 9;
-constexpr int motor2B = 11;
+// Pines del L298N para los motores
+const int motor1Pin1 = 7;
+const int motor1Pin2 = 8;
+const int motor2Pin1 = 9;
+const int motor2Pin2 = 11;
+
+const int en_A = 5;
+const int en_B = 6;
 
 // Valores de los botones
-constexpr uint16_t POWER = 0xC;     // Botón POWER
-constexpr uint16_t ADELANTE = 0x1;  // Botón ADELANTE
-constexpr uint16_t ATRAS = 0x6;     // Botón ATRÁS
-constexpr uint16_t IZQUIERDA = 0x4; // Botón IZQUIERDA
-constexpr uint16_t DERECHA = 0x9;   // Botón DERECHA
+constexpr uint16_t POWER = 0x43;     // Botón POWER
+constexpr uint16_t ADELANTE = 0x18;  // Botón ADELANTE
+constexpr uint16_t ATRAS = 0x52;     // Botón ATRÁS
+constexpr uint16_t IZQUIERDA = 0x8;  // Botón IZQUIERDA
+constexpr uint16_t DERECHA = 0x5A;   // Botón DERECHA
 
 // Valores del sensor y servo
 Servo servoMotor;
 const int trigPin = A5; // out
 const int echoPin = A4; // in
 const int servoPin = 3;
+
+// VALORES DE LOS PINES DE LOS LEDS
+const int pinRojo = 4;
+const int pinVerde = 1;
+const int pinAzul = 13;
 
 unsigned long lastCommandTime = 0;  // Para registrar el último tiempo en el que se recibió una señal
 const unsigned long commandTimeout = 150;  // Tiempo en milisegundos para determinar si el botón fue soltado
@@ -38,7 +46,7 @@ uint16_t irReceive()
 
     if (IrReceiver.decode())
     {
-        //IrReceiver.printIRResultShort(&Serial);
+        IrReceiver.printIRResultShort(&Serial);
         if (IrReceiver.decodedIRData.protocol == UNKNOWN)
         {
             IrReceiver.printIRResultRawFormatted(&Serial, true);
@@ -60,11 +68,19 @@ void setup()
 
     ES_MANUAL = true;
 
-    // Configuración de los pines del motor como salida
-    pinMode(motor1A, OUTPUT);
-    pinMode(motor1B, OUTPUT);
-    pinMode(motor2A, OUTPUT);
-    pinMode(motor2B, OUTPUT);
+     // Configuración de los pines del motor como salida
+    pinMode(motor1Pin1, OUTPUT);
+    pinMode(motor1Pin2, OUTPUT);
+    pinMode(motor2Pin1, OUTPUT);
+    pinMode(motor2Pin2, OUTPUT);
+    pinMode(en_A, OUTPUT);
+    pinMode(en_B, OUTPUT);
+
+
+    // CONFIGURAR PINES DEL LEDs
+    pinMode(pinRojo, OUTPUT);
+    pinMode(pinVerde, OUTPUT);
+    pinMode(pinAzul, OUTPUT);
 
     // Inicializar los motores apagados
     apagarMotores();
@@ -89,10 +105,12 @@ void loop()
     if (irCode == CONTROL)
     {
         ES_MANUAL = !ES_MANUAL;
+        setColor(180,0,0);
     }
 
     if (ES_MANUAL)
     {
+        setColor(0,0,0);
         if (irCode != 0)
         {
             lastCommandTime = millis();  // Actualiza el tiempo de la última señal recibida
@@ -104,19 +122,19 @@ void loop()
             break;
 
         case ADELANTE:
-            adelante();
+            irAdelante();
             break;
 
         case IZQUIERDA:
-            izquierda();
+            irIzquierda();
             break;
 
         case ATRAS:
-            atras();
+            irAtras();
             break;
 
         case DERECHA:
-            derecha();
+            irDerecha();
             break;
 
         default:
@@ -200,48 +218,67 @@ int medirDistancia() {
   return distancia;
 }
 
-void adelante()
-{
-    // Ambos motores hacia adelante
-    digitalWrite(motor1A, HIGH); // HIGH SOLO, adelante Motor1
-    digitalWrite(motor1B, LOW);// HIGH SOLO, atras Motor1
-    digitalWrite(motor2A, LOW); // HIGH SOLO, atras Motor2
-    digitalWrite(motor2B, HIGH); // HIGH SOLO, adelante Motor1
+void irDerecha() {
+  // Ambos motores hacia adelante
+  // Mirando la pila hacia abajo
+  Serial.print("derecha");
+  digitalWrite(motor1Pin1, LOW); // Motores izquierdo atras
+  digitalWrite(motor1Pin2, HIGH); // Motores izquierdo adelante
+  digitalWrite(motor2Pin1, LOW); // Motores derechos atras
+  digitalWrite(motor2Pin2, HIGH); // Motores derechos adelante
+  analogWrite(en_A, 200); 
+  analogWrite(en_B, 200);
 }
 
-void atras()
-{
-    // Ambos motores hacia atrás
-    digitalWrite(motor1A, LOW);
-    digitalWrite(motor1B, HIGH);
-    digitalWrite(motor2A, LOW);
-    digitalWrite(motor2B, HIGH);
+void irIzquierda() {
+  // Ambos motores hacia atrás
+  Serial.print("izquierda");
+
+  digitalWrite(motor1Pin1, HIGH);
+  digitalWrite(motor1Pin2, LOW);
+  digitalWrite(motor2Pin1, HIGH);
+  digitalWrite(motor2Pin2, LOW);
+  analogWrite(en_A, 200); 
+  analogWrite(en_B, 200);
 }
 
-void izquierda()
-{
-    // Motor derecho hacia adelante, motor izquierdo hacia atrás
-    digitalWrite(motor1A, HIGH);
-    digitalWrite(motor1B, LOW);
-    digitalWrite(motor2A, HIGH);
-    digitalWrite(motor2B, LOW);
+void irAtras() {
+  // Motor derecho hacia adelante, motor izquierdo hacia atrás
+  Serial.print("atras");
+
+  digitalWrite(motor1Pin1, HIGH);
+  digitalWrite(motor1Pin2, LOW);
+  digitalWrite(motor2Pin1, LOW);
+  digitalWrite(motor2Pin2, HIGH);
+  analogWrite(en_A, 200); 
+  analogWrite(en_B, 200);
 }
 
-void derecha()
-{
-    // Motor derecho hacia atrás, motor izquierdo hacia adelante
-    digitalWrite(motor1A, LOW);
-    digitalWrite(motor1B, HIGH);
-    digitalWrite(motor2A, HIGH);
-    digitalWrite(motor2B, LOW);
+void irAdelante() {
+  // Motor derecho hacia atrás, motor izquierdo hacia adelante
+  Serial.print("adelante");
+
+  digitalWrite(motor1Pin1, LOW);
+  digitalWrite(motor1Pin2, HIGH);
+  digitalWrite(motor2Pin1, HIGH);
+  digitalWrite(motor2Pin2, LOW);
+  analogWrite(en_A, 200); 
+  analogWrite(en_B, 200);
 }
 
-void apagarMotores()
-{
-    // Apagar todos los motores
-    digitalWrite(motor1A, LOW);
-    digitalWrite(motor1B, LOW);
-    digitalWrite(motor2A, LOW);
-    digitalWrite(motor2B, LOW);
+void apagarMotores() {
+  // Apagar todos los motores
+  digitalWrite(motor1Pin1, LOW);
+  digitalWrite(motor1Pin2, LOW);
+  digitalWrite(motor2Pin1, LOW);
+  digitalWrite(motor2Pin2, LOW);
+
+  analogWrite(en_A, 0); 
+  analogWrite(en_B, 0);
 }
 
+void setColor(int rojo, int verde, int azul) {
+  analogWrite(pinRojo, rojo);
+  analogWrite(pinVerde, verde);
+  analogWrite(pinAzul, azul);
+}
