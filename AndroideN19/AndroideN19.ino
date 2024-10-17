@@ -3,7 +3,7 @@
 
 // Control manual/automatico
 boolean ES_MANUAL;
-constexpr uint16_t CONTROL = 0x9; // Botón Cambia de Control
+constexpr uint16_t CONTROL = 0x7; // Botón Cambia de Control
 
 // Pines del receptor IR
 constexpr uint8_t RECV_PIN{2}; // Pin del receptor IR
@@ -17,6 +17,13 @@ const int motor2Pin2 = 11;
 const int en_A = 5;
 const int en_B = 6;
 
+//SERVO
+Servo servoMotor;
+
+// SENSORES DE PRESENCIA
+const int presenciaIzq = 12;
+const int presenciaDer = 10;
+
 // Valores de los botones
 constexpr uint16_t POWER = 0x43;     // Botón POWER
 constexpr uint16_t ADELANTE = 0x18;  // Botón ADELANTE
@@ -25,7 +32,6 @@ constexpr uint16_t IZQUIERDA = 0x8;  // Botón IZQUIERDA
 constexpr uint16_t DERECHA = 0x5A;   // Botón DERECHA
 
 // Valores del sensor y servo
-Servo servoMotor;
 const int trigPin = A5; // out
 const int echoPin = A4; // in
 const int servoPin = 3;
@@ -85,12 +91,17 @@ void setup()
     // Inicializar los motores apagados
     apagarMotores();
   
-  	// Configurar el servo
-  	servoMotor.attach(servoPin);
-  
-  	// Configurar los pines del sensor ultrasónico
+  	// Configuración del sensor de distancia
     pinMode(trigPin, OUTPUT);
     pinMode(echoPin, INPUT);
+
+    // Configuración del servomotor
+    servoMotor.attach(servoPin);
+    servoMotor.write(90);  // Posición inicial del servo
+
+    // Configuración de los sensores de presencia
+    pinMode(presenciaIzq, INPUT);
+    pinMode(presenciaDer, INPUT);
 
     // Inicializar la recepción del IR
     IrReceiver.begin(RECV_PIN);
@@ -110,7 +121,7 @@ void loop()
 
     if (ES_MANUAL)
     {
-        setColor(0,0,0);
+        setColor(0,0,180);
         if (irCode != 0)
         {
             lastCommandTime = millis();  // Actualiza el tiempo de la última señal recibida
@@ -149,90 +160,69 @@ void loop()
             apagarMotores();
         }
     }
-    else
-    {
-        int distanciaIzquierda, distanciaCentro, distanciaDerecha;
-
-        // Medir la distancia hacia la izquierda
-        servoMotor.write(0);
-        delay(500);
-        distanciaIzquierda = medirDistancia();
-
-        // Medir la distancia al frente
-        servoMotor.write(90);
-        delay(500);
-        distanciaCentro = medirDistancia();
-
-        // Medir la distancia hacia la derecha
-        servoMotor.write(180);
-        delay(500);
-        distanciaDerecha = medirDistancia();
-
-        // Determinar la dirección en función de las distancias medidas
-        if (distanciaCentro < 20) {
-            apagarMotores();
-            delay(500);
-
-            // Si el obstáculo mas cerca a la derecha derecha, gira a la izquierda
-            if (distanciaDerecha < distanciaIzquierda) {
-                izquierda();
-                delay(1000);
-            }
-            // Si el obstáculo esta más cerca a la izquierda, gira a la derecha
-            else if (distanciaIzquierda < distanciaDerecha) {
-                derecha();
-                delay(1000);
-            }
-            else {
-                // Si el obstáculo está de frente pero ambas direcciones son iguales,
-                // simplemente retrocede y gira a la derecha por defecto
-                atras();
-                delay(1000);
-                derecha();
-                delay(1000);
-            }
-            apagarMotores();
-            delay(500);
-        }
-        else {
-            // Si no hay obstáculos, sigue adelante
-            adelante();
-        }
+    else{
+        automaticMode();
     }
 }
 
-int medirDistancia() {
-  // Enviar un pulso al pin TRIG
-  digitalWrite(trigPin, LOW); // Se asegura que cualquier anterir este apagado
-  delayMicroseconds(2); // esperar
-  digitalWrite(trigPin, HIGH); // alta durante 10 ms
-  delayMicroseconds(10); 
-  digitalWrite(trigPin, LOW); // fin del pulso
 
-  // Leer el tiempo que tarda el pulso en volver al pin ECHO
-  long duracion = pulseIn(echoPin, HIGH);
+void automaticMode() {
+    // Leer sensores de presencia
+    bool sensorIzq = digitalRead(presenciaIzq);
+    bool sensorDer = digitalRead(presenciaDer);
+    long distance = obtenerDistancia();
 
-  // Calcular la distancia en centímetros
-  int distancia = duracion * 0.034 / 2;
-  
-  return distancia;
+    // // Mostrar la distancia en el monitor serial
+    // Serial.print("Distancia: ");
+    // Serial.println(distance);
+
+    // Lógica de decisiones basadas en sensores
+    if (!sensorIzq) {
+        Serial.println("presencia a la izquierda.");
+        servoMotor.write(40);  // Posición inicial del servo
+        irDerecha();
+    } else if (!sensorDer) {
+        Serial.println("presencia a la derecha.");
+        servoMotor.write(140);  // Posición inicial del servo
+        irIzquierda();
+    } else if (distance < 15) {
+        apagarMotores();
+    } else {
+        irAdelante();
+    }
+}   
+
+long obtenerDistancia() {
+    // Generar pulso de trigger
+    digitalWrite(trigPin, LOW);
+    delayMicroseconds(2);
+    digitalWrite(trigPin, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(trigPin, LOW);
+
+    // Medir el tiempo de regreso del eco y calcular la distancia
+    long duracion = pulseIn(echoPin, HIGH);
+    return duracion / 58;  // Conversión a centímetros
 }
 
 void irDerecha() {
   // Ambos motores hacia adelante
   // Mirando la pila hacia abajo
-  Serial.print("derecha");
+  // Serial.print("derecha");
   digitalWrite(motor1Pin1, LOW); // Motores izquierdo atras
   digitalWrite(motor1Pin2, HIGH); // Motores izquierdo adelante
   digitalWrite(motor2Pin1, LOW); // Motores derechos atras
   digitalWrite(motor2Pin2, HIGH); // Motores derechos adelante
   analogWrite(en_A, 200); 
   analogWrite(en_B, 200);
+  if(!ES_MANUAL){
+    servoMotor.write(90);
+  }
 }
 
 void irIzquierda() {
   // Ambos motores hacia atrás
-  Serial.print("izquierda");
+  // Serial.print("izquierda");
 
   digitalWrite(motor1Pin1, HIGH);
   digitalWrite(motor1Pin2, LOW);
@@ -240,30 +230,33 @@ void irIzquierda() {
   digitalWrite(motor2Pin2, LOW);
   analogWrite(en_A, 200); 
   analogWrite(en_B, 200);
+  if(!ES_MANUAL){
+    servoMotor.write(90);
+  }
 }
 
 void irAtras() {
   // Motor derecho hacia adelante, motor izquierdo hacia atrás
-  Serial.print("atras");
+  // Serial.print("atras");
 
   digitalWrite(motor1Pin1, HIGH);
   digitalWrite(motor1Pin2, LOW);
   digitalWrite(motor2Pin1, LOW);
   digitalWrite(motor2Pin2, HIGH);
-  analogWrite(en_A, 200); 
-  analogWrite(en_B, 200);
+  analogWrite(en_A, 150); 
+  analogWrite(en_B, 150);
 }
 
 void irAdelante() {
   // Motor derecho hacia atrás, motor izquierdo hacia adelante
-  Serial.print("adelante");
+  // Serial.print("adelante");
 
   digitalWrite(motor1Pin1, LOW);
   digitalWrite(motor1Pin2, HIGH);
   digitalWrite(motor2Pin1, HIGH);
   digitalWrite(motor2Pin2, LOW);
-  analogWrite(en_A, 200); 
-  analogWrite(en_B, 200);
+  analogWrite(en_A, 100); 
+  analogWrite(en_B, 100);
 }
 
 void apagarMotores() {
@@ -282,3 +275,5 @@ void setColor(int rojo, int verde, int azul) {
   analogWrite(pinVerde, verde);
   analogWrite(pinAzul, azul);
 }
+
+ 
